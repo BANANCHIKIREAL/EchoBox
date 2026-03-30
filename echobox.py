@@ -75,6 +75,12 @@ class EchoBox:
         self.sounds_folder = os.path.join(self.app_dir, "sounds")
         self.sound_library = {}
         
+        # Плейлисты
+        self.playlists_file = os.path.join(self.app_dir, "playlists.json")
+        self.playlists = {}
+        self.current_playlist = None  # Текущий выбранный плейлист
+        self.playlist_mode = False  # Режим воспроизведения плейлиста
+        
         # Настройки биндов для цифр (в папке приложения)
         self.bindings_file = os.path.join(self.app_dir, "key_bindings.json")
         self.number_bindings = {
@@ -253,7 +259,144 @@ class EchoBox:
                                  fg="#E0E7FF", bg=LIGHT_ACCENT)
         subtitle_label.pack(anchor=tk.W)
         
-        # Панель инструментов с кнопками как на скриншоте
+        # Панель списка звуков с карточным дизайном - ПЕРЕМЕСТИЛИ ВЫШЕ, ПОСЛЕ ЗАГОЛОВКА
+        list_container = tk.Frame(main_container, bg=LIGHT_PANE, relief=tk.FLAT, bd=1)
+        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        
+        list_inner = tk.Frame(list_container, bg=LIGHT_PANE)
+        list_inner.pack(fill=tk.BOTH, expand=True, padx=32, pady=24)
+        
+        # Заголовок списка
+        list_title = tk.Label(list_inner, text="📂 Ваша библиотека", 
+                              font=("Segoe UI Emoji", 18, "bold"), 
+                              fg=LIGHT_TEXT, bg=LIGHT_PANE)
+        list_title.pack(pady=(0, 16), anchor=tk.W)
+        
+        # Панель плейлистов
+        playlist_frame = tk.Frame(list_inner, bg=LIGHT_PANE, relief=tk.FLAT, bd=1)
+        playlist_frame.pack(fill=tk.X, pady=(0, 16))
+        
+        playlist_inner = tk.Frame(playlist_frame, bg=LIGHT_PANE)
+        playlist_inner.pack(fill=tk.X, padx=12, pady=8)
+        
+        # Заголовок плейлистов
+        playlist_header = tk.Frame(playlist_inner, bg=LIGHT_PANE)
+        playlist_header.pack(fill=tk.X, pady=(0, 8))
+        
+        playlist_label = tk.Label(playlist_header, text="🎵 Плейлисты:", 
+                                  font=("Segoe UI Emoji", 12, "bold"), 
+                                  fg=LIGHT_TEXT, bg=LIGHT_PANE)
+        playlist_label.pack(side=tk.LEFT)
+        
+        # Кнопки управления плейлистами
+        playlist_btn_frame = tk.Frame(playlist_header, bg=LIGHT_PANE)
+        playlist_btn_frame.pack(side=tk.RIGHT)
+        
+        self.new_playlist_btn = tk.Button(playlist_btn_frame, text="➕ Новый", 
+                                        font=("Segoe UI", 9, "bold"),
+                                        bg=LIGHT_SUCCESS, fg="white",
+                                        relief=tk.FLAT, bd=0, padx=8, pady=4,
+                                        command=self.show_create_playlist_dialog)
+        self.new_playlist_btn.pack(side=tk.LEFT, padx=(0, 4))
+        
+        self.playlist_mode_btn = tk.Button(playlist_btn_frame, text="🔂 Режим плейлиста", 
+                                           font=("Segoe UI", 9, "bold"),
+                                           bg=LIGHT_BORDER, fg=LIGHT_TEXT_SECONDARY,
+                                           relief=tk.FLAT, bd=0, padx=8, pady=4,
+                                           command=self.toggle_playlist_mode)
+        self.playlist_mode_btn.pack(side=tk.LEFT)
+        
+        # Список плейлистов
+        self.playlist_frame_inner = tk.Frame(playlist_inner, bg=LIGHT_PANE)
+        self.playlist_frame_inner.pack(fill=tk.X)
+        
+        self.refresh_playlist_list()
+        
+        # Поле поиска
+        search_frame = tk.Frame(list_inner, bg=LIGHT_PANE)
+        search_frame.pack(fill=tk.X, pady=(0, 16))
+        
+        search_label = tk.Label(search_frame, text="🔍 Поиск:", 
+                               font=("Segoe UI Emoji", 12), 
+                               fg=LIGHT_TEXT_SECONDARY, bg=LIGHT_PANE)
+        search_label.pack(side=tk.LEFT, padx=(0, 8))
+        
+        self.search_var = tk.StringVar()
+        self.search_var.trace('w', self.filter_sounds)
+        
+        self.search_entry = tk.Entry(search_frame, textvariable=self.search_var,
+                                     font=("Segoe UI", 11), bg=LIGHT_PANE, 
+                                     fg=LIGHT_TEXT, relief=tk.FLAT, bd=1)
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+        
+        # Кнопка очистки поиска
+        self.clear_search_btn = tk.Button(search_frame, text="✕", 
+                                         font=("Segoe UI", 10, "bold"),
+                                         bg=LIGHT_BORDER, fg=LIGHT_TEXT_SECONDARY,
+                                         relief=tk.FLAT, bd=0, padx=8, pady=4,
+                                         command=self.clear_search)
+        self.clear_search_btn.pack(side=tk.RIGHT)
+        
+        # Treeview
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Light.Treeview", 
+                        background=LIGHT_PANE,
+                        foreground=LIGHT_TEXT,
+                        fieldbackground=LIGHT_PANE,
+                        borderwidth=0,
+                        relief=tk.FLAT)
+        style.configure("Light.Treeview.Heading", 
+                        background=LIGHT_PANE,
+                        foreground=LIGHT_TEXT,
+                        borderwidth=0,
+                        relief=tk.FLAT)
+        
+        tree_frame = tk.Frame(list_inner, bg=LIGHT_PANE)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.sound_tree = ttk.Treeview(tree_frame, columns=("name", "duration", "format"), 
+                                     show="headings", style="Light.Treeview",
+                                     height=12)
+        
+        # Настройка колонок
+        self.sound_tree.heading("name", text="Название")
+        self.sound_tree.heading("duration", text="Длительность")
+        self.sound_tree.heading("format", text="Формат")
+        
+        self.sound_tree.column("name", width=250, anchor="w")
+        self.sound_tree.column("duration", width=100, anchor="center")
+        self.sound_tree.column("format", width=80, anchor="center")
+        
+        # Добавляем прокрутку
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.sound_tree.yview)
+        self.sound_tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.sound_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Контекстное меню для правого клика
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="Переименовать", command=self.rename_sound)
+        self.context_menu.add_separator()
+        
+        # Подменю для добавления в плейлист
+        self.playlist_submenu = tk.Menu(self.context_menu, tearoff=0)
+        self.context_menu.add_cascade(label="Добавить в плейлист", menu=self.playlist_submenu)
+        
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Удалить", command=self.delete_sound_from_library)
+        
+        # Привязываем правый клик
+        self.sound_tree.bind("<Button-3>", self.show_context_menu)
+        
+        # Привязка выбора
+        self.sound_tree.bind("<<TreeviewSelect>>", self.on_sound_select)
+        
+        # Загрузка данных
+        self.load_library()
+        
+        # Панель инструментов с кнопками как на скриншоте - ПЕРЕМЕСТИЛИ ВНИЗ
         toolbar_frame = tk.Frame(main_container, bg="#FFFFFF", relief=tk.FLAT, bd=0)
         toolbar_frame.pack(fill=tk.X, pady=(0, 20))
         
@@ -327,104 +470,20 @@ class EchoBox:
                                   fg=LIGHT_TEXT_SECONDARY, bg=LIGHT_PANE)
         self.status_label.pack(side=tk.LEFT, padx=(16, 0))
         
-        # Убираем info_label так как панели больше нет
-        
         # Правая группа кнопок (пустая, так как бинды отключены)
         right_buttons = tk.Frame(toolbar_inner, bg=LIGHT_PANE, relief=tk.RAISED, bd=1)
         right_buttons.pack(side=tk.RIGHT)
         
-        # Панель списка звуков с карточным дизайном
-        list_container = tk.Frame(main_container, bg=LIGHT_PANE, relief=tk.FLAT, bd=1)
-        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        # Создаем фон после небольшой задержки
+        self.root.after(500, self.create_background)
         
-        list_inner = tk.Frame(list_container, bg=LIGHT_PANE)
-        list_inner.pack(fill=tk.BOTH, expand=True, padx=32, pady=24)
+        # Настройка аудио потока
+        self.setup_audio_stream()
         
-        # Заголовок списка
-        list_title = tk.Label(list_inner, text="📂 Ваша библиотека", 
-                              font=("Segoe UI Emoji", 18, "bold"), 
-                              fg=LIGHT_TEXT, bg=LIGHT_PANE)
-        list_title.pack(pady=(0, 16), anchor=tk.W)
-        
-        # Поле поиска
-        search_frame = tk.Frame(list_inner, bg=LIGHT_PANE)
-        search_frame.pack(fill=tk.X, pady=(0, 16))
-        
-        search_label = tk.Label(search_frame, text="🔍 Поиск:", 
-                               font=("Segoe UI Emoji", 12), 
-                               fg=LIGHT_TEXT_SECONDARY, bg=LIGHT_PANE)
-        search_label.pack(side=tk.LEFT, padx=(0, 8))
-        
-        self.search_var = tk.StringVar()
-        self.search_var.trace('w', self.filter_sounds)
-        
-        self.search_entry = tk.Entry(search_frame, textvariable=self.search_var,
-                                     font=("Segoe UI", 11), bg=LIGHT_PANE, 
-                                     fg=LIGHT_TEXT, relief=tk.FLAT, bd=1)
-        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-        
-        # Кнопка очистки поиска
-        self.clear_search_btn = tk.Button(search_frame, text="✕", 
-                                         font=("Segoe UI", 10, "bold"),
-                                         bg=LIGHT_BORDER, fg=LIGHT_TEXT_SECONDARY,
-                                         relief=tk.FLAT, bd=0, padx=8, pady=4,
-                                         command=self.clear_search)
-        self.clear_search_btn.pack(side=tk.RIGHT)
-        
-        # Treeview
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("Light.Treeview", 
-                        background=LIGHT_PANE,
-                        foreground=LIGHT_TEXT,
-                        fieldbackground=LIGHT_PANE,
-                        borderwidth=0,
-                        relief=tk.FLAT)
-        style.configure("Light.Treeview.Heading", 
-                        background=LIGHT_PANE,
-                        foreground=LIGHT_TEXT,
-                        borderwidth=0,
-                        relief=tk.FLAT)
-        
-        tree_frame = tk.Frame(list_inner, bg=LIGHT_PANE)
-        tree_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.sound_tree = ttk.Treeview(tree_frame, columns=("name", "duration", "format"), 
-                                     show="headings", style="Light.Treeview",
-                                     height=12)
-        
-        # Настройка колонок
-        self.sound_tree.heading("name", text="Название")
-        self.sound_tree.heading("duration", text="Длительность")
-        self.sound_tree.heading("format", text="Формат")
-        
-        self.sound_tree.column("name", width=250, anchor="w")
-        self.sound_tree.column("duration", width=100, anchor="center")
-        self.sound_tree.column("format", width=80, anchor="center")
-        
-        # Добавляем прокрутку
-        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.sound_tree.yview)
-        self.sound_tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.sound_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Контекстное меню для правого клика
-        self.context_menu = tk.Menu(self.root, tearoff=0)
-        self.context_menu.add_command(label="Переименовать", command=self.rename_sound)
-        self.context_menu.add_command(label="Удалить", command=self.delete_sound_from_library)
-        
-        # Привязываем правый клик
-        self.sound_tree.bind("<Button-3>", self.show_context_menu)
-        
-        # Привязка выбора
-        self.sound_tree.bind("<<TreeviewSelect>>", self.on_sound_select)
-        
-        # Загрузка данных
-        self.load_library()
-        self.load_number_bindings()
-        self.apply_number_bindings()
-        self.refresh_sound_list()
+        # Горячие клавиши
+        self.root.bind('<Control-f>', lambda e: self.search_entry.focus_set())
+        self.root.bind('<Control-F>', lambda e: self.search_entry.focus_set())
+        self.root.bind('<Escape>', lambda e: self.clear_search())
     
     def load_number_bindings(self):
         """Загрузка настроек биндов для цифр"""
@@ -639,6 +698,9 @@ class EchoBox:
                     self.sound_library = json.load(f)
         except Exception as e:
             self.sound_library = {}
+        
+        # Загрузка плейлистов
+        self.load_playlists()
     
     def save_library(self):
         """Сохранение библиотеки в JSON файл"""
@@ -647,6 +709,70 @@ class EchoBox:
                 json.dump(self.sound_library, f, ensure_ascii=False, indent=2)
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось сохранить библиотеку: {str(e)}")
+    
+    def load_playlists(self):
+        """Загрузка плейлистов из JSON файла"""
+        try:
+            if os.path.exists(self.playlists_file):
+                with open(self.playlists_file, 'r', encoding='utf-8') as f:
+                    self.playlists = json.load(f)
+        except Exception as e:
+            self.playlists = {}
+    
+    def save_playlists(self):
+        """Сохранение плейлистов в JSON файл"""
+        try:
+            with open(self.playlists_file, 'w', encoding='utf-8') as f:
+                json.dump(self.playlists, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось сохранить плейлисты: {str(e)}")
+    
+    def create_playlist(self, name):
+        """Создание нового плейлиста"""
+        if not name.strip():
+            messagebox.showerror("Ошибка", "Введите название плейлиста")
+            return
+        
+        if name in self.playlists:
+            messagebox.showerror("Ошибка", "Плейлист с таким названием уже существует")
+            return
+        
+        self.playlists[name] = []
+        self.save_playlists()
+        self.refresh_playlist_list()
+        # Автоматически выбираем созданный плейлист
+        self.select_playlist(name)
+        messagebox.showinfo("Успех", f"Плейлист '{name}' создан")
+    
+    def add_to_playlist(self, playlist_name, sound_id):
+        """Добавление звука в плейлист"""
+        if playlist_name in self.playlists:
+            if sound_id not in self.playlists[playlist_name]:
+                self.playlists[playlist_name].append(sound_id)
+                self.save_playlists()
+                return True
+        return False
+    
+    def remove_from_playlist(self, playlist_name, sound_id):
+        """Удаление звука из плейлиста"""
+        if playlist_name in self.playlists:
+            if sound_id in self.playlists[playlist_name]:
+                self.playlists[playlist_name].remove(sound_id)
+                self.save_playlists()
+                return True
+        return False
+    
+    def delete_playlist(self, name):
+        """Удаление плейлиста"""
+        if name in self.playlists:
+            if messagebox.askyesno("Удаление", f"Удалить плейлист '{name}'?"):
+                del self.playlists[name]
+                self.save_playlists()
+                if self.current_playlist == name:
+                    self.current_playlist = None
+                    self.playlist_mode = False
+                self.refresh_playlist_list()
+                messagebox.showinfo("Успех", f"Плейлист '{name}' удален")
     
     def refresh_sound_list(self):
         """Обновление списка звуков"""
@@ -740,7 +866,15 @@ class EchoBox:
             self.save_library()
             self.refresh_sound_list()
             
-            messagebox.showinfo("Успех", f"Звук '{name}' ({format_name}, {duration}) добавлен в библиотеку!")
+            # Если в режиме плейлиста, добавляем в текущий плейлист
+            if self.playlist_mode and self.current_playlist:
+                if self.add_to_playlist(self.current_playlist, sound_id):
+                    self.refresh_playlist_list()  # Обновляем счетчик в плейлисте
+                    messagebox.showinfo("Успех", f"Звук '{name}' ({format_name}, {duration}) добавлен в плейлист '{self.current_playlist}'!")
+                else:
+                    messagebox.showinfo("Успех", f"Звук '{name}' ({format_name}, {duration}) добавлен в библиотеку!")
+            else:
+                messagebox.showinfo("Успех", f"Звук '{name}' ({format_name}, {duration}) добавлен в библиотеку!")
             
         except Exception as e:
             print(f"Ошибка при добавлении файла: {e}")
@@ -823,7 +957,51 @@ class EchoBox:
         item = self.sound_tree.identify_row(event.y)
         if item:
             self.sound_tree.selection_set(item)
+            
+            # Обновляем подменю плейлистов
+            self.update_playlist_submenu()
+            
             self.context_menu.post(event.x_root, event.y_root)
+    
+    def update_playlist_submenu(self):
+        """Обновление подменю плейлистов в контекстном меню"""
+        # Очистка подменю
+        self.playlist_submenu.delete(0, tk.END)
+        
+        if not self.playlists:
+            self.playlist_submenu.add_command(label="Нет плейлистов", state=tk.DISABLED)
+        else:
+            # Получаем ID выбранного звука
+            selection = self.sound_tree.selection()
+            if selection:
+                item = self.sound_tree.item(selection[0])
+                sound_name = item['values'][0]
+                
+                # Находим ID звука
+                sound_id = None
+                for sid, info in self.sound_library.items():
+                    if info["name"] == sound_name:
+                        sound_id = sid
+                        break
+                
+                if sound_id:
+                    # Добавляем плейлисты в подменю
+                    for playlist_name in self.playlists.keys():
+                        # Проверяем, есть ли уже звук в плейлисте
+                        is_in_playlist = sound_id in self.playlists[playlist_name]
+                        
+                        if is_in_playlist:
+                            # Если звук уже в плейлисте, показываем это
+                            self.playlist_submenu.add_command(
+                                label=f"✓ {playlist_name}", 
+                                state=tk.DISABLED
+                            )
+                        else:
+                            # Если звука нет в плейлисте, добавляем команду для добавления
+                            self.playlist_submenu.add_command(
+                                label=playlist_name,
+                                command=lambda name=playlist_name, sid=sound_id: self.add_sound_to_playlist_context(name, sid)
+                            )
     
     def rename_sound(self):
         """Переименовывает выбранный звук"""
@@ -836,65 +1014,75 @@ class EchoBox:
         
         # Создаем диалоговое окно для ввода нового имени
         dialog = tk.Toplevel(self.root)
-        dialog.title("Переименовать звук")
+        dialog.title("Переименование звука")
         dialog.geometry("300x120")
         dialog.configure(bg=LIGHT_PANE)
         dialog.transient(self.root)
         dialog.grab_set()
         
-        # Центрируем окно
+        # Центрирование окна
         dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (300 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (120 // 2)
-        dialog.geometry(f"300x120+{x}+{y}")
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
         
-        tk.Label(dialog, text="Новое название:", bg=LIGHT_PANE, fg=LIGHT_TEXT).pack(pady=10)
+        # Поле ввода
+        tk.Label(dialog, text="Новое название:", font=("Segoe UI", 11), 
+                fg=LIGHT_TEXT, bg=LIGHT_PANE).pack(pady=(20, 5))
         
-        entry = tk.Entry(dialog, bg=LIGHT_PANE, fg=LIGHT_TEXT, relief=tk.FLAT, bd=1)
-        entry.pack(padx=20, pady=5, fill=tk.X)
+        entry = tk.Entry(dialog, font=("Segoe UI", 11), bg=LIGHT_PANE, fg=LIGHT_TEXT)
+        entry.pack(padx=20, fill=tk.X)
         entry.insert(0, old_name)
         entry.select_range(0, tk.END)
-        entry.focus()
+        entry.focus_set()
+        
+        # Кнопки
+        btn_frame = tk.Frame(dialog, bg=LIGHT_PANE)
+        btn_frame.pack(pady=20)
         
         def save_rename():
             new_name = entry.get().strip()
             if new_name and new_name != old_name:
-                # Находим звук в библиотеке
+                # Поиск ID звука
                 for sound_id, info in self.sound_library.items():
                     if info["name"] == old_name:
                         info["name"] = new_name
+                        self.save_library()
+                        self.refresh_sound_list()
                         break
-                
-                # Сохраняем библиотеку
-                self.save_library()
-                self.refresh_sound_list()
-                self.status_label.config(text=f"Звук переименован: {new_name}")
+            
             dialog.destroy()
         
         def cancel_rename():
             dialog.destroy()
         
-        button_frame = tk.Frame(dialog, bg=LIGHT_PANE)
-        button_frame.pack(pady=10)
+        save_button = tk.Button(btn_frame, text="Сохранить", font=("Segoe UI", 10, "bold"),
+                               bg=LIGHT_SUCCESS, fg="white", relief=tk.FLAT, bd=0, padx=15, pady=5,
+                               command=save_rename)
+        save_button.pack(side=tk.LEFT, padx=(0, 10))
         
-        # Создаем кнопки с фоном через Frame
-        save_frame = tk.Frame(button_frame, bg="#667eea", relief=tk.FLAT, bd=0)
-        save_frame.pack(side=tk.LEFT, padx=5)
-        save_button = tk.Button(save_frame, text="Сохранить", command=save_rename,
-                 bg="#667eea", fg="WHITE", relief=tk.SOLID, bd=1,
-                 padx=20, pady=8, cursor="hand2")
-        save_button.pack(padx=3, pady=3)
+        cancel_button = tk.Button(btn_frame, text="Отмена", font=("Segoe UI", 10),
+                                bg=LIGHT_BORDER, fg=LIGHT_TEXT, relief=tk.FLAT, bd=0, padx=15, pady=5,
+                                command=cancel_rename)
+        cancel_button.pack(side=tk.LEFT)
         
-        cancel_frame = tk.Frame(button_frame, bg="#fc8181", relief=tk.FLAT, bd=0)
-        cancel_frame.pack(side=tk.LEFT, padx=5)
-        cancel_button = tk.Button(cancel_frame, text="Отмена", command=cancel_rename,
-                 bg="#fc8181", fg="WHITE", relief=tk.SOLID, bd=1,
-                 padx=20, pady=8, cursor="hand2")
-        cancel_button.pack(padx=3, pady=3)
-        
-        # Обработка Enter
         entry.bind('<Return>', lambda e: save_rename())
-        dialog.bind('<Escape>', lambda e: cancel_rename())
+        entry.bind('<Escape>', lambda e: cancel_rename())
+        
+        # Позиционирование курсора
+        cursor = "hand2"
+        save_button.config(cursor=cursor)
+        cancel_button.config(cursor=cursor)
+    
+    def add_sound_to_playlist_context(self, playlist_name, sound_id):
+        """Добавление звука в плейлист через контекстное меню"""
+        if self.add_to_playlist(playlist_name, sound_id):
+            sound_name = self.sound_library[sound_id]["name"]
+            messagebox.showinfo("Успех", f"'{sound_name}' добавлен в плейлист '{playlist_name}'")
+            self.refresh_playlist_list()
+            # Если мы в режиме плейлиста, обновляем список звуков
+            if self.playlist_mode and self.current_playlist == playlist_name:
+                self.filter_sounds()
     
     def play_selected_sound(self):
         """Воспроизведение выбранного звука"""
@@ -1167,31 +1355,169 @@ class EchoBox:
         for item in self.sound_tree.get_children():
             self.sound_tree.delete(item)
         
-        # Фильтрация и добавление звуков
-        filtered_count = 0
-        for sound_id, info in self.sound_library.items():
-            sound_name = info["name"].lower()
-            sound_format = info.get("format", "").lower()
-            
-            # Проверка совпадения по названию или формату
-            if search_term in sound_name or search_term in sound_format:
-                self.sound_tree.insert("", tk.END, values=(
-                    info["name"],
-                    info.get("duration", "N/A"),
-                    info.get("format", "N/A")
-                ))
-                filtered_count += 1
-        
-        # Обновление статуса
-        if search_term:
-            self.status_label.config(text=f"🔍 Найдено: {filtered_count} звуков")
+        # Определение источника звуков (библиотека или плейлист)
+        if self.playlist_mode and self.current_playlist:
+            # Режим плейлиста - показываем только звуки из плейлиста
+            if self.current_playlist in self.playlists:
+                playlist_sound_ids = self.playlists[self.current_playlist]
+                filtered_count = 0
+                
+                for sound_id in playlist_sound_ids:
+                    if sound_id in self.sound_library:
+                        info = self.sound_library[sound_id]
+                        sound_name = info["name"].lower()
+                        sound_format = info.get("format", "").lower()
+                        
+                        # Проверка совпадения по названию или формату
+                        if not search_term or search_term in sound_name or search_term in sound_format:
+                            self.sound_tree.insert("", tk.END, values=(
+                                info["name"],
+                                info.get("duration", "N/A"),
+                                info.get("format", "N/A")
+                            ))
+                            filtered_count += 1
+                
+                # Обновление статуса
+                if search_term:
+                    self.status_label.config(text=f"🔍 Плейлист '{self.current_playlist}': {filtered_count} звуков")
+                else:
+                    self.status_label.config(text=f"🎵 Плейлист: {self.current_playlist}")
         else:
-            self.status_label.config(text="📂 Ваша библиотека")
+            # Режим библиотеки - показываем все звуки
+            filtered_count = 0
+            for sound_id, info in self.sound_library.items():
+                sound_name = info["name"].lower()
+                sound_format = info.get("format", "").lower()
+                
+                # Проверка совпадения по названию или формату
+                if not search_term or search_term in sound_name or search_term in sound_format:
+                    self.sound_tree.insert("", tk.END, values=(
+                        info["name"],
+                        info.get("duration", "N/A"),
+                        info.get("format", "N/A")
+                    ))
+                    filtered_count += 1
+            
+            # Обновление статуса
+            if search_term:
+                self.status_label.config(text=f"🔍 Найдено: {filtered_count} звуков")
+            else:
+                self.status_label.config(text="📂 Ваша библиотека")
     
     def clear_search(self):
         """Очистка поля поиска"""
         self.search_var.set("")
         self.search_entry.focus_set()
+    
+    def refresh_playlist_list(self):
+        """Обновление списка плейлистов"""
+        # Очистка текущих виджетов
+        for widget in self.playlist_frame_inner.winfo_children():
+            widget.destroy()
+        
+        if not self.playlists:
+            no_playlist_label = tk.Label(self.playlist_frame_inner, 
+                                        text="Нет плейлистов. Создайте новый плейлист.",
+                                        font=("Segoe UI", 10),
+                                        fg=LIGHT_TEXT_SECONDARY, bg=LIGHT_PANE)
+            no_playlist_label.pack(pady=4)
+            return
+        
+        # Создание кнопок для каждого плейлиста
+        for playlist_name in self.playlists.keys():
+            playlist_item_frame = tk.Frame(self.playlist_frame_inner, bg=LIGHT_PANE)
+            playlist_item_frame.pack(fill=tk.X, pady=2)
+            
+            # Кнопка плейлиста
+            playlist_btn = tk.Button(playlist_item_frame, 
+                                   text=f"🎵 {playlist_name} ({len(self.playlists[playlist_name])})",
+                                   font=("Segoe UI", 10),
+                                   bg=LIGHT_ACCENT if self.current_playlist == playlist_name else LIGHT_BORDER,
+                                   fg="white" if self.current_playlist == playlist_name else LIGHT_TEXT,
+                                   relief=tk.FLAT, bd=0,
+                                   anchor=tk.W,
+                                   command=lambda name=playlist_name: self.select_playlist(name))
+            playlist_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+            
+            # Кнопка удаления
+            delete_btn = tk.Button(playlist_item_frame, text="🗑️",
+                                  font=("Segoe UI", 8),
+                                  bg=LIGHT_DANGER, fg="white",
+                                  relief=tk.FLAT, bd=0, padx=6, pady=2,
+                                  command=lambda name=playlist_name: self.delete_playlist(name))
+            delete_btn.pack(side=tk.RIGHT)
+    
+    def select_playlist(self, name):
+        """Выбор плейлиста"""
+        self.current_playlist = name
+        self.playlist_mode = True
+        # Обновляем кнопку режима плейлиста
+        self.playlist_mode_btn.config(bg=LIGHT_ACCENT, fg="white", text="🔂 В плейлисте")
+        self.refresh_playlist_list()
+        self.filter_sounds()  # Обновить список звуков
+        self.status_label.config(text=f"🎵 Плейлист: {name}")
+    
+    def toggle_playlist_mode(self):
+        """Переключение режима плейлиста"""
+        if self.playlist_mode:
+            self.playlist_mode = False
+            self.current_playlist = None
+            self.playlist_mode_btn.config(bg=LIGHT_BORDER, fg=LIGHT_TEXT_SECONDARY, text="🔂 Режим плейлиста")
+            self.status_label.config(text="📂 Ваша библиотека")
+        else:
+            if self.playlists:
+                # Если есть плейлисты, выбираем первый
+                first_playlist = list(self.playlists.keys())[0]
+                self.select_playlist(first_playlist)
+            else:
+                messagebox.showinfo("Информация", "Сначала создайте плейлист")
+                return
+        
+        self.refresh_playlist_list()
+        self.filter_sounds()
+    
+    def show_create_playlist_dialog(self):
+        """Показать диалог создания плейлиста"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Новый плейлист")
+        dialog.geometry("400x150")
+        dialog.configure(bg=LIGHT_PANE)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Центрирование окна
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Поле ввода названия
+        tk.Label(dialog, text="Название плейлиста:", 
+                font=("Segoe UI", 12), fg=LIGHT_TEXT, bg=LIGHT_PANE).pack(pady=(25, 10))
+        
+        name_entry = tk.Entry(dialog, font=("Segoe UI", 12), bg=LIGHT_PANE, fg=LIGHT_TEXT)
+        name_entry.pack(padx=30, fill=tk.X)
+        name_entry.focus_set()
+        
+        # Кнопки
+        btn_frame = tk.Frame(dialog, bg=LIGHT_PANE)
+        btn_frame.pack(pady=25)
+        
+        def create():
+            name = name_entry.get().strip()
+            if name:
+                self.create_playlist(name)
+                dialog.destroy()
+        
+        tk.Button(btn_frame, text="Создать", font=("Segoe UI", 11, "bold"),
+                 bg=LIGHT_SUCCESS, fg="white", relief=tk.FLAT, bd=0, padx=20, pady=8,
+                 command=create).pack(side=tk.LEFT, padx=(0, 15))
+        
+        tk.Button(btn_frame, text="Отмена", font=("Segoe UI", 11),
+                 bg=LIGHT_BORDER, fg=LIGHT_TEXT, relief=tk.FLAT, bd=0, padx=20, pady=8,
+                 command=dialog.destroy).pack(side=tk.LEFT)
+        
+        name_entry.bind('<Return>', lambda e: create())
 
 if __name__ == "__main__":
     root = tk.Tk()

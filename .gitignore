@@ -47,6 +47,7 @@ Thumbs.db
 background.png
 sound_library.json
 key_bindings.json
+playlists.json
 sounds/*.wav
 sounds/*.mp3
 EchoBox_v*/
