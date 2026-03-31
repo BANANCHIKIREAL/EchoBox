@@ -70,6 +70,9 @@ class EchoBox:
         self.total_samples = 0     # Общее количество сэмплов
         self.current_sound_id = None  # ID текущего звука
         
+        # Переменные для прогресс-бара
+        self.progress_update_job = None  # ID задачи обновления прогресса
+        
         # Библиотека звуков (в папке приложения)
         self.library_file = os.path.join(self.app_dir, "sound_library.json")
         self.sounds_folder = os.path.join(self.app_dir, "sounds")
@@ -261,10 +264,10 @@ class EchoBox:
         
         # Панель инструментов с кнопками как на скриншоте - ВОЗВРАЩАЕМ НАВЕРХ
         toolbar_frame = tk.Frame(main_container, bg="#FFFFFF", relief=tk.FLAT, bd=0)
-        toolbar_frame.pack(fill=tk.X, pady=(0, 20))
+        toolbar_frame.pack(fill=tk.X, pady=(0, 2))  # Минимальный отступ
         
         toolbar_inner = tk.Frame(toolbar_frame, bg=LIGHT_PANE)
-        toolbar_inner.pack(fill=tk.X, padx=32, pady=20)
+        toolbar_inner.pack(fill=tk.X, padx=32, pady=8)  # Минимальные отступы
         
         # Левая группа кнопок
         left_buttons = tk.Frame(toolbar_inner, bg=LIGHT_PANE, relief=tk.RAISED, bd=1)
@@ -337,29 +340,62 @@ class EchoBox:
         right_buttons = tk.Frame(toolbar_inner, bg=LIGHT_PANE, relief=tk.RAISED, bd=1)
         right_buttons.pack(side=tk.RIGHT)
         
-        # Панель списка звуков с карточным дизайном - ПОСЛЕ КНОПОК
+        # Панель прогресс-бара - СРАЗУ ПОСЛЕ КНОПОК
+        progress_container = tk.Frame(main_container, bg="#FFFFFF", relief=tk.FLAT, bd=0)
+        progress_container.pack(fill=tk.X, pady=(0, 2))  # Минимальный отступ снизу
+        
+        progress_inner = tk.Frame(progress_container, bg=LIGHT_PANE)
+        progress_inner.pack(fill=tk.X, padx=32, pady=4)  # Минимальные отступы
+        
+        # Информация о текущем треке
+        track_info_frame = tk.Frame(progress_inner, bg=LIGHT_PANE)
+        track_info_frame.pack(fill=tk.X, pady=(0, 2))  # Минимальный отступ
+        
+        self.track_name_label = tk.Label(track_info_frame, text="", 
+                                        font=("Segoe UI", 10, "bold"), 
+                                        fg=LIGHT_TEXT, bg=LIGHT_PANE)
+        self.track_name_label.pack(side=tk.LEFT)
+        
+        self.track_time_label = tk.Label(track_info_frame, text="00:00 / 00:00", 
+                                        font=("Segoe UI", 9), 
+                                        fg=LIGHT_TEXT_SECONDARY, bg=LIGHT_PANE)
+        self.track_time_label.pack(side=tk.RIGHT)
+        
+        # Прогресс-бар
+        progress_frame = tk.Frame(progress_inner, bg=LIGHT_PANE)
+        progress_frame.pack(fill=tk.X)
+        
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, 
+                                           maximum=100, style=".Horizontal.TProgressbar")
+        self.progress_bar.pack(fill=tk.X, pady=(0, 1))  # Минимальный отступ снизу
+        
+        # Привязываем клик по прогресс-бару для перемотки
+        self.progress_bar.bind("<Button-1>", self.on_progress_click)
+        
+        # Панель списка звуков с карточным дизайном - ПОСЛЕ КНОПОК И ПРОГРЕСС-БАРА
         list_container = tk.Frame(main_container, bg=LIGHT_PANE, relief=tk.FLAT, bd=1)
-        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))  # Уменьшил отступ снизу
         
         list_inner = tk.Frame(list_container, bg=LIGHT_PANE)
-        list_inner.pack(fill=tk.BOTH, expand=True, padx=32, pady=24)
+        list_inner.pack(fill=tk.BOTH, expand=True, padx=32, pady=12)  # Уменьшил отступы
         
         # Заголовок списка
         list_title = tk.Label(list_inner, text="📂 Ваша библиотека", 
                               font=("Segoe UI Emoji", 18, "bold"), 
                               fg=LIGHT_TEXT, bg=LIGHT_PANE)
-        list_title.pack(pady=(0, 16), anchor=tk.W)
+        list_title.pack(pady=(0, 8), anchor=tk.W)  # Уменьшил отступ
         
         # Панель плейлистов
         playlist_frame = tk.Frame(list_inner, bg=LIGHT_PANE, relief=tk.FLAT, bd=1)
-        playlist_frame.pack(fill=tk.X, pady=(0, 16))
+        playlist_frame.pack(fill=tk.X, pady=(0, 8))  # Уменьшил отступ
         
         playlist_inner = tk.Frame(playlist_frame, bg=LIGHT_PANE)
-        playlist_inner.pack(fill=tk.X, padx=12, pady=8)
+        playlist_inner.pack(fill=tk.X, padx=12, pady=6)  # Уменьшил отступы
         
         # Заголовок плейлистов
         playlist_header = tk.Frame(playlist_inner, bg=LIGHT_PANE)
-        playlist_header.pack(fill=tk.X, pady=(0, 8))
+        playlist_header.pack(fill=tk.X, pady=(0, 6))  # Уменьшил отступ
         
         playlist_label = tk.Label(playlist_header, text="🎵 Плейлисты:", 
                                   font=("Segoe UI Emoji", 12, "bold"), 
@@ -388,11 +424,9 @@ class EchoBox:
         self.playlist_frame_inner = tk.Frame(playlist_inner, bg=LIGHT_PANE)
         self.playlist_frame_inner.pack(fill=tk.X)
         
-        self.refresh_playlist_list()
-        
         # Поле поиска
         search_frame = tk.Frame(list_inner, bg=LIGHT_PANE)
-        search_frame.pack(fill=tk.X, pady=(0, 16))
+        search_frame.pack(fill=tk.X, pady=(0, 8))  # Уменьшил отступ
         
         search_label = tk.Label(search_frame, text="🔍 Поиск:", 
                                font=("Segoe UI Emoji", 12), 
@@ -473,6 +507,10 @@ class EchoBox:
         
         # Загрузка данных
         self.load_library()
+        # Обновляем список звуков после загрузки
+        self.filter_sounds()
+        # Обновляем список плейлистов после загрузки
+        self.refresh_playlist_list()
         
         # Создаем фон после небольшой задержки
         self.root.after(500, self.create_background)
@@ -485,8 +523,126 @@ class EchoBox:
         self.root.bind('<Control-F>', lambda e: self.search_entry.focus_set())
         self.root.bind('<Escape>', lambda e: self.clear_search())
     
+    def on_progress_click(self, event):
+        """Обработка клика по прогресс-бару для перемотки"""
+        if not self.is_playing or not self.current_audio_data:
+            return
+        
+        # Получаем позицию клика относительно прогресс-бара
+        click_x = event.x
+        bar_width = self.progress_bar.winfo_width()
+        
+        if bar_width > 0:
+            # Вычисляем новую позицию (0.0 до 1.0)
+            progress = click_x / bar_width
+            progress = max(0.0, min(1.0, progress))  # Ограничиваем диапазон
+            
+            # Устанавливаем новую позицию
+            new_position = int(progress * self.total_samples)
+            self.current_position = new_position
+            
+            # Обновляем прогресс-бар
+            self.update_progress_bar()
+            
+            # Если воспроизводится, перезапускаем с новой позиции
+            if self.is_playing:
+                self.restart_playback()
+    
+    def restart_playback(self):
+        """Перезапуск воспроизведения с текущей позиции"""
+        if self.current_playback_obj:
+            self.current_playback_obj.stop()
+        
+        if self.current_audio_data is not None:
+            # Воспроизводим с новой позиции
+            self.current_playback_obj = sd.play(
+                self.current_audio_data[self.current_position:],
+                self.current_sample_rate,
+                dtype=self.current_audio_data.dtype
+            )
+            # Перезапускаем отсчет времени
+            self.playback_start_time = time.time() - (self.current_position / self.sample_rate)
+            self.start_progress_update()
+    
+    def update_progress_bar(self):
+        """Обновление прогресс-бара и времени"""
+        if self.total_samples > 0:
+            progress = (self.current_position / self.total_samples) * 100
+            self.progress_var.set(progress)
+            
+            # Обновляем время
+            current_time = self.current_position // self.sample_rate
+            total_time = self.total_samples // self.sample_rate
+            
+            current_str = f"{current_time // 60:02d}:{current_time % 60:02d}"
+            total_str = f"{total_time // 60:02d}:{total_time % 60:02d}"
+            
+            self.track_time_label.config(text=f"{current_str} / {total_str}")
+    
+    def start_progress_update(self):
+        """Запуск обновления прогресса"""
+        # Останавливаем предыдущее обновление
+        if self.progress_update_job:
+            self.root.after_cancel(self.progress_update_job)
+        
+        # Запускаем новое обновление каждые 100мс
+        self.update_progress()
+    
+    def update_progress(self):
+        """Периодическое обновление прогресса"""
+        if self.is_playing and self.current_audio_data is not None:
+            # Обновляем текущую позицию на основе прошедшего времени
+            if hasattr(self, 'playback_start_time'):
+                elapsed_time = time.time() - self.playback_start_time
+                # Вычисляем позицию в сэмплах
+                calculated_position = int(elapsed_time * self.sample_rate)
+                
+                # Проверяем, не вышли ли за пределы файла
+                if calculated_position < self.total_samples:
+                    self.current_position = calculated_position
+                else:
+                    # Дошли до конца - естественное завершение
+                    self.current_position = self.total_samples
+                    self.update_progress_bar()
+                    self.on_playback_finished()
+                    return
+            
+            self.update_progress_bar()
+            
+            # Планируем следующее обновление
+            self.progress_update_job = self.root.after(100, self.update_progress)
+    
+    def on_playback_finished(self):
+        """Обработка естественного завершения воспроизведения"""
+        self.is_playing = False
+        self.stop_progress_update()
+        
+        # Обновляем кнопки
+        self.play_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+        self.finish_button.config(state=tk.DISABLED)
+        
+        # Показываем сообщение
+        self.status_label.config(text="✅ Воспроизведение завершено")
+        
+        # Сбрасываем позицию для следующего воспроизведения
+        self.current_position = 0
+        self.update_progress_bar()
+    
+    def stop_progress_update(self):
+        """Остановка обновления прогресса"""
+        if self.progress_update_job:
+            self.root.after_cancel(self.progress_update_job)
+            self.progress_update_job = None
+    
+    def reset_progress_bar(self):
+        """Сброс прогресс-бара"""
+        self.progress_var.set(0)
+        self.track_name_label.config(text="")
+        self.track_time_label.config(text="00:00 / 00:00")
+        self.stop_progress_update()
+    
     def load_number_bindings(self):
-        """Загрузка настроек биндов для цифр"""
         try:
             if os.path.exists(self.bindings_file):
                 with open(self.bindings_file, 'r', encoding='utf-8') as f:
@@ -740,9 +896,8 @@ class EchoBox:
         self.playlists[name] = []
         self.save_playlists()
         self.refresh_playlist_list()
-        # Автоматически выбираем созданный плейлист
-        self.select_playlist(name)
-        messagebox.showinfo("Успех", f"Плейлист '{name}' создан")
+        # Не выбираем плейлист автоматически, позволяем пользователю выбрать его
+        messagebox.showinfo("Успех", f"Плейлист '{name}' создан. Нажмите на него для выбора.")
     
     def add_to_playlist(self, playlist_name, sound_id):
         """Добавление звука в плейлист"""
@@ -906,12 +1061,18 @@ class EchoBox:
                 # Удаление из библиотеки
                 del self.sound_library[sound_id]
                 
+                # Удаление из всех плейлистов
+                for playlist_name in self.playlists:
+                    if sound_id in self.playlists[playlist_name]:
+                        self.playlists[playlist_name].remove(sound_id)
+                self.save_playlists()
+                
                 # Сохранение и обновление
                 self.save_library()
                 self.refresh_sound_list()
+                self.refresh_playlist_list()  # Обновляем счетчики в плейлистах
                 
-                # Отключение кнопок
-                self.delete_button.config(state=tk.DISABLED)
+                # Отключение кнопки воспроизведения
                 self.play_button.config(state=tk.DISABLED)
                 
                 messagebox.showinfo("Успех", f"Звук '{sound_name}' удален из библиотеки!")
@@ -939,9 +1100,32 @@ class EchoBox:
     def stop_playback(self):
         """Остановка воспроизведения с сохранением позиции"""
         if self.is_playing:
-            # Позиция сохраняется автоматически в цикле воспроизведения
-            self.is_playing = False  # Это остановит цикл и сохранит текущую позицию
-            self.status_label.config(text=f"⏸️ Остановлено на {self.current_position//self.sample_rate} сек")
+            # Сначала устанавливаем флаг остановки
+            self.is_playing = False
+            
+            # Останавливаем обновление прогресс-бара ПЕРЕД остановкой звука
+            self.stop_progress_update()
+            
+            # Останавливаем физическое воспроизведение
+            try:
+                if self.current_playback_obj:
+                    self.current_playback_obj.stop()
+                    self.current_playback_obj = None
+                sd.stop()
+            except:
+                pass
+            
+            # Обновляем кнопки
+            self.play_button.config(state=tk.NORMAL)   # Включаем воспроизведение
+            self.stop_button.config(state=tk.DISABLED)  # Отключаем стоп
+            self.finish_button.config(state=tk.DISABLED)  # Отключаем закончить
+            
+            # Показываем сообщение с сохраненной позицией
+            current_sec = self.current_position // self.sample_rate
+            self.status_label.config(text=f"⏸️ Остановлено на {current_sec} сек")
+            
+            # Обновляем прогресс-бар, чтобы показать текущую позицию (НЕ сбрасываем)
+            self.update_progress_bar()
     
     def finish_playback(self):
         """Полное завершение воспроизведения"""
@@ -949,6 +1133,13 @@ class EchoBox:
             self.stop_all()
             # Сбрасываем позицию в начало
             self.current_position = 0
+            self.reset_progress_bar()  # Сбрасываем прогресс-бар
+            
+            # Обновляем кнопки
+            self.play_button.config(state=tk.NORMAL)   # Включаем воспроизведение
+            self.stop_button.config(state=tk.DISABLED)  # Отключаем стоп
+            self.finish_button.config(state=tk.DISABLED)  # Отключаем закончить
+            
             self.status_label.config(text="✅ Воспроизведение завершено")
     
     def show_context_menu(self, event):
@@ -1219,11 +1410,20 @@ class EchoBox:
             self.stop_all()
             
             self.is_playing = True
-            self.start_time = time.time()  # Запоминаем время начала
+            # Устанавливаем время начала с учетом сохраненной позиции
+            self.playback_start_time = time.time() - (self.current_position / self.sample_rate)
+            
+            # Устанавливаем информацию о треке
+            if self.current_sound_id and self.current_sound_id in self.sound_library:
+                sound_info = self.sound_library[self.current_sound_id]
+                self.track_name_label.config(text=sound_info["name"])
             
             # Воспроизведение в отдельном потоке
             self.playback_thread = threading.Thread(target=self.play_audio_simple, daemon=True)
             self.playback_thread.start()
+            
+            # Запускаем обновление прогресс-бара
+            self.start_progress_update()
             
             # Обновление интерфейса
             self.play_button.config(state=tk.DISABLED)  # Отключаем воспроизведение
@@ -1257,50 +1457,28 @@ class EchoBox:
             # Берем сэмплы с текущей позиции
             audio_to_play = self.current_audio_data[start_pos:]
             
-            # Запоминаем точное время начала воспроизведения
-            actual_start_time = time.time()
-            
             # Воспроизведение через sounddevice
-            sd.play(audio_to_play, self.sample_rate)
+            self.current_playback_obj = sd.play(audio_to_play, self.sample_rate)
             
             # Ожидание завершения или остановки
-            natural_finish = True  # Флаг естественного завершения
-            
             while self.is_playing:
                 time.sleep(0.1)
                 if not sd.get_stream().active:
                     break
-                
-                # Обновляем текущую позицию для точного стопа
-                elapsed = time.time() - actual_start_time
-                self.current_position = start_pos + int(elapsed * self.sample_rate)
-                
-                # Ограничиваем позицию чтобы не выйти за пределы
-                if self.current_position >= self.total_samples:
-                    self.current_position = self.total_samples
-                    break
             
             if not self.is_playing:
-                sd.stop()
-                natural_finish = False  # Ручная остановка
+                # Ручная остановка - ничего дополнительно не делаем
                 print(f"Ручная остановка на позиции {self.current_position} ({self.current_position//self.sample_rate} сек)")
-                # Не вызываем playback_finished() для ручной остановки
-                self.root.after(0, self.update_buttons_after_stop)
             else:
-                # Если воспроизведение завершилось естественным образом
-                self.current_position = 0  # Сбрасываем позицию
-                natural_finish = True
+                # Естественное завершение
                 print("Естественное завершение воспроизведения")
-            
-            # Вызываем playback_finished() только при естественном завершении
-            if natural_finish:
-                self.root.after(0, self.playback_finished)
+                self.root.after(0, self.on_playback_finished)
             
         except Exception as e:
             print(f"Ошибка в play_audio_simple: {e}")
             self.root.after(0, lambda: messagebox.showerror("Ошибка воспроизведения", str(e)))
             self.is_playing = False
-            self.root.after(0, lambda: self.play_button.config(state=tk.NORMAL))  # Включаем воспроизведение
+            self.root.after(0, lambda: self.play_button.config(state=tk.NORMAL))
     
     def update_buttons_after_stop(self):
         """Обновление кнопок после ручной остановки"""
@@ -1330,14 +1508,15 @@ class EchoBox:
         except Exception as e:
             pass
         
+        # Останавливаем обновление прогресс-бара
+        self.stop_progress_update()
+        
         # Сброс состояний
         self.is_playing = False
         self.is_paused = False
         
-        # Обновление интерфейса
-        self.play_button.config(state=tk.NORMAL)   # Включаем воспроизведение
-        self.stop_button.config(state=tk.DISABLED)  # Отключаем стоп
-        self.finish_button.config(state=tk.DISABLED)  # Отключаем закончить
+        # Обновление интерфейса (кнопки обновляются в вызывающих функциях)
+        # Это позволяет сохранить разную логику для stop и finish
     
     def setup_audio_stream(self):
         """Настройка аудио потока"""
@@ -1460,18 +1639,20 @@ class EchoBox:
     def toggle_playlist_mode(self):
         """Переключение режима плейлиста"""
         if self.playlist_mode:
+            # Выход из режима плейлиста
             self.playlist_mode = False
             self.current_playlist = None
             self.playlist_mode_btn.config(bg=LIGHT_BORDER, fg=LIGHT_TEXT_SECONDARY, text="🔂 Режим плейлиста")
             self.status_label.config(text="📂 Ваша библиотека")
         else:
-            if self.playlists:
-                # Если есть плейлисты, выбираем первый
-                first_playlist = list(self.playlists.keys())[0]
-                self.select_playlist(first_playlist)
-            else:
+            # Вход в режим плейлиста - только если выбран конкретный плейлист
+            if not self.playlists:
                 messagebox.showinfo("Информация", "Сначала создайте плейлист")
                 return
+            
+            # Не выбираем плейлист автоматически, ждем выбора пользователя
+            messagebox.showinfo("Информация", "Выберите плейлист из списка ниже")
+            return
         
         self.refresh_playlist_list()
         self.filter_sounds()
