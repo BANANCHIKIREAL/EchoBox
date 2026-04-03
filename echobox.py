@@ -53,11 +53,17 @@ class EchoBox:
         
         # Получаем путь к папке приложения
         if getattr(sys, 'frozen', False):
-            # Если запущено как EXE
-            self.app_dir = os.path.dirname(sys.executable)
+            # Если запущено как EXE - используем папку где находится exe
+            self.app_dir = os.path.dirname(os.path.abspath(sys.executable))
         else:
             # Если запущено как Python скрипт
             self.app_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Для exe файла всегда используем папку data в том же каталоге
+        if getattr(sys, 'frozen', False):
+            self.data_dir = os.path.join(self.app_dir, "data")
+        else:
+            self.data_dir = self.app_dir
         
         # Аудио переменные
         self.current_audio_data = None
@@ -74,12 +80,12 @@ class EchoBox:
         self.progress_update_job = None  # ID задачи обновления прогресса
         
         # Библиотека звуков (в папке приложения)
-        self.library_file = os.path.join(self.app_dir, "sound_library.json")
-        self.sounds_folder = os.path.join(self.app_dir, "sounds")
+        self.library_file = os.path.join(self.data_dir, "sound_library.json")
+        self.sounds_folder = os.path.join(self.data_dir, "sounds")
         self.sound_library = {}
         
         # Плейлисты
-        self.playlists_file = os.path.join(self.app_dir, "playlists.json")
+        self.playlists_file = os.path.join(self.data_dir, "playlists.json")
         self.playlists = {}
         self.current_playlist = None  # Текущий выбранный плейлист
         self.playlist_mode = False  # Режим воспроизведения плейлиста
@@ -370,9 +376,6 @@ class EchoBox:
                                            maximum=100, style=".Horizontal.TProgressbar")
         self.progress_bar.pack(fill=tk.X, pady=(0, 1))  # Минимальный отступ снизу
         
-        # Привязываем клик по прогресс-бару для перемотки
-        self.progress_bar.bind("<Button-1>", self.on_progress_click)
-        
         # Панель списка звуков с карточным дизайном - ПОСЛЕ КНОПОК И ПРОГРЕСС-БАРА
         list_container = tk.Frame(main_container, bg=LIGHT_PANE, relief=tk.FLAT, bd=1)
         list_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))  # Уменьшил отступ снизу
@@ -523,31 +526,7 @@ class EchoBox:
         self.root.bind('<Control-F>', lambda e: self.search_entry.focus_set())
         self.root.bind('<Escape>', lambda e: self.clear_search())
     
-    def on_progress_click(self, event):
-        """Обработка клика по прогресс-бару для перемотки"""
-        if not self.is_playing or not self.current_audio_data:
-            return
         
-        # Получаем позицию клика относительно прогресс-бара
-        click_x = event.x
-        bar_width = self.progress_bar.winfo_width()
-        
-        if bar_width > 0:
-            # Вычисляем новую позицию (0.0 до 1.0)
-            progress = click_x / bar_width
-            progress = max(0.0, min(1.0, progress))  # Ограничиваем диапазон
-            
-            # Устанавливаем новую позицию
-            new_position = int(progress * self.total_samples)
-            self.current_position = new_position
-            
-            # Обновляем прогресс-бар
-            self.update_progress_bar()
-            
-            # Если воспроизводится, перезапускаем с новой позиции
-            if self.is_playing:
-                self.restart_playback()
-    
     def restart_playback(self):
         """Перезапуск воспроизведения с текущей позиции"""
         if self.current_playback_obj:
@@ -557,13 +536,13 @@ class EchoBox:
             # Воспроизводим с новой позиции
             self.current_playback_obj = sd.play(
                 self.current_audio_data[self.current_position:],
-                self.current_sample_rate,
-                dtype=self.current_audio_data.dtype
+                self.current_sample_rate
             )
             # Перезапускаем отсчет времени
             self.playback_start_time = time.time() - (self.current_position / self.sample_rate)
             self.start_progress_update()
     
+        
     def update_progress_bar(self):
         """Обновление прогресс-бара и времени"""
         if self.total_samples > 0:
