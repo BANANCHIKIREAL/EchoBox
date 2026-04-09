@@ -99,39 +99,11 @@ body {
     color: var(--text-primary);
 }
 
-.logo-icon {
+.logo-img {
     width: 32px;
     height: 32px;
-    background: var(--gradient-primary);
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 1.2rem;
-    position: relative;
-}
-
-.logo-icon::before {
-    content: " ";
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    background: white;
-    border-radius: 50%;
-    top: 6px;
-    left: 10px;
-}
-
-.logo-icon::after {
-    content: " ";
-    position: absolute;
-    width: 8px;
-    height: 16px;
-    background: white;
-    top: 14px;
-    left: 12px;
-    border-radius: 0 0 4px 4px;
+    object-fit: contain;
+    margin-right: var(--spacing-xs);
 }
 
 .nav-menu {
@@ -202,38 +174,12 @@ body {
     gap: var(--spacing-sm);
 }
 
-.hero-title .emoji {
-    font-size: 3.5rem;
-    display: inline-block;
+.hero-logo {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    margin-right: var(--spacing-md);
     animation: bounce 2s infinite;
-    width: 60px;
-    height: 60px;
-    background: var(--gradient-primary);
-    border-radius: 50%;
-    position: relative;
-    margin-right: var(--spacing-sm);
-}
-
-.hero-title .emoji::before {
-    content: " ";
-    position: absolute;
-    width: 20px;
-    height: 20px;
-    background: white;
-    border-radius: 50%;
-    top: 12px;
-    left: 20px;
-}
-
-.hero-title .emoji::after {
-    content: " ";
-    position: absolute;
-    width: 12px;
-    height: 28px;
-    background: white;
-    top: 28px;
-    left: 24px;
-    border-radius: 0 0 6px 6px;
 }
 
 @keyframes bounce {
@@ -880,6 +826,13 @@ body {
     font-weight: 600;
     font-size: 1.1rem;
     margin-bottom: var(--spacing-sm);
+}
+
+.footer-logo-img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    margin-right: var(--spacing-xs);
 }
 
 .footer-description {
